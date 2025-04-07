@@ -2,7 +2,7 @@ name: mnemoszune
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.1+1
 
 environment:
   sdk: ^3.7.0
@@ -21,9 +21,15 @@ dependencies:
   path: ^1.8.3
   riverpod: ^2.5.1
   flutter_riverpod: ^2.5.1
-  file_picker: ^6.2.1
+  file_picker: ^10.0.0
   shared_preferences: ^2.2.2
   http: ^1.1.0
+  langchain: ^0.7.7+2
+  langchain_chroma: ^0.2.1+5
+  langchain_core: ^0.3.6+1
+  langchain_community: ^0.3.3
+  langchain_openai: ^0.7.3
+  syncfusion_flutter_pdf: ^29.1.35
 
 dev_dependencies:
   flutter_test:

@@ -380,7 +380,7 @@ class SettingsScreen extends ConsumerWidget {
           const Padding(
             padding: EdgeInsets.all(16.0),
             child: Text(
-              'Version 1.0.0',
+              'Version 1.0.1',
               style: TextStyle(color: Colors.grey),
               textAlign: TextAlign.center,
             ),
