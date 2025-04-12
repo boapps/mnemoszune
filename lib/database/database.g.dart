@@ -1149,6 +1149,21 @@ class $MaterialsTable extends Materials
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _isVectorizedMeta = const VerificationMeta(
+    'isVectorized',
+  );
+  @override
+  late final GeneratedColumn<bool> isVectorized = GeneratedColumn<bool>(
+    'is_vectorized',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_vectorized" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1157,6 +1172,7 @@ class $MaterialsTable extends Materials
     subjectId,
     filePath,
     createdAt,
+    isVectorized,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1214,6 +1230,15 @@ class $MaterialsTable extends Materials
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('is_vectorized')) {
+      context.handle(
+        _isVectorizedMeta,
+        isVectorized.isAcceptableOrUnknown(
+          data['is_vectorized']!,
+          _isVectorizedMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1252,6 +1277,11 @@ class $MaterialsTable extends Materials
             DriftSqlType.dateTime,
             data['${effectivePrefix}created_at'],
           )!,
+      isVectorized:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.bool,
+            data['${effectivePrefix}is_vectorized'],
+          )!,
     );
   }
 
@@ -1268,6 +1298,7 @@ class Material extends DataClass implements Insertable<Material> {
   final int subjectId;
   final String filePath;
   final DateTime createdAt;
+  final bool isVectorized;
   const Material({
     required this.id,
     required this.title,
@@ -1275,6 +1306,7 @@ class Material extends DataClass implements Insertable<Material> {
     required this.subjectId,
     required this.filePath,
     required this.createdAt,
+    required this.isVectorized,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1287,6 +1319,7 @@ class Material extends DataClass implements Insertable<Material> {
     map['subject_id'] = Variable<int>(subjectId);
     map['file_path'] = Variable<String>(filePath);
     map['created_at'] = Variable<DateTime>(createdAt);
+    map['is_vectorized'] = Variable<bool>(isVectorized);
     return map;
   }
 
@@ -1301,6 +1334,7 @@ class Material extends DataClass implements Insertable<Material> {
       subjectId: Value(subjectId),
       filePath: Value(filePath),
       createdAt: Value(createdAt),
+      isVectorized: Value(isVectorized),
     );
   }
 
@@ -1316,6 +1350,7 @@ class Material extends DataClass implements Insertable<Material> {
       subjectId: serializer.fromJson<int>(json['subjectId']),
       filePath: serializer.fromJson<String>(json['filePath']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      isVectorized: serializer.fromJson<bool>(json['isVectorized']),
     );
   }
   @override
@@ -1328,6 +1363,7 @@ class Material extends DataClass implements Insertable<Material> {
       'subjectId': serializer.toJson<int>(subjectId),
       'filePath': serializer.toJson<String>(filePath),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'isVectorized': serializer.toJson<bool>(isVectorized),
     };
   }
 
@@ -1338,6 +1374,7 @@ class Material extends DataClass implements Insertable<Material> {
     int? subjectId,
     String? filePath,
     DateTime? createdAt,
+    bool? isVectorized,
   }) => Material(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -1345,6 +1382,7 @@ class Material extends DataClass implements Insertable<Material> {
     subjectId: subjectId ?? this.subjectId,
     filePath: filePath ?? this.filePath,
     createdAt: createdAt ?? this.createdAt,
+    isVectorized: isVectorized ?? this.isVectorized,
   );
   Material copyWithCompanion(MaterialsCompanion data) {
     return Material(
@@ -1355,6 +1393,10 @@ class Material extends DataClass implements Insertable<Material> {
       subjectId: data.subjectId.present ? data.subjectId.value : this.subjectId,
       filePath: data.filePath.present ? data.filePath.value : this.filePath,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      isVectorized:
+          data.isVectorized.present
+              ? data.isVectorized.value
+              : this.isVectorized,
     );
   }
 
@@ -1366,14 +1408,22 @@ class Material extends DataClass implements Insertable<Material> {
           ..write('description: $description, ')
           ..write('subjectId: $subjectId, ')
           ..write('filePath: $filePath, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('isVectorized: $isVectorized')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, title, description, subjectId, filePath, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    title,
+    description,
+    subjectId,
+    filePath,
+    createdAt,
+    isVectorized,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1383,7 +1433,8 @@ class Material extends DataClass implements Insertable<Material> {
           other.description == this.description &&
           other.subjectId == this.subjectId &&
           other.filePath == this.filePath &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.isVectorized == this.isVectorized);
 }
 
 class MaterialsCompanion extends UpdateCompanion<Material> {
@@ -1393,6 +1444,7 @@ class MaterialsCompanion extends UpdateCompanion<Material> {
   final Value<int> subjectId;
   final Value<String> filePath;
   final Value<DateTime> createdAt;
+  final Value<bool> isVectorized;
   const MaterialsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -1400,6 +1452,7 @@ class MaterialsCompanion extends UpdateCompanion<Material> {
     this.subjectId = const Value.absent(),
     this.filePath = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.isVectorized = const Value.absent(),
   });
   MaterialsCompanion.insert({
     this.id = const Value.absent(),
@@ -1408,6 +1461,7 @@ class MaterialsCompanion extends UpdateCompanion<Material> {
     required int subjectId,
     required String filePath,
     required DateTime createdAt,
+    this.isVectorized = const Value.absent(),
   }) : title = Value(title),
        subjectId = Value(subjectId),
        filePath = Value(filePath),
@@ -1419,6 +1473,7 @@ class MaterialsCompanion extends UpdateCompanion<Material> {
     Expression<int>? subjectId,
     Expression<String>? filePath,
     Expression<DateTime>? createdAt,
+    Expression<bool>? isVectorized,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1427,6 +1482,7 @@ class MaterialsCompanion extends UpdateCompanion<Material> {
       if (subjectId != null) 'subject_id': subjectId,
       if (filePath != null) 'file_path': filePath,
       if (createdAt != null) 'created_at': createdAt,
+      if (isVectorized != null) 'is_vectorized': isVectorized,
     });
   }
 
@@ -1437,6 +1493,7 @@ class MaterialsCompanion extends UpdateCompanion<Material> {
     Value<int>? subjectId,
     Value<String>? filePath,
     Value<DateTime>? createdAt,
+    Value<bool>? isVectorized,
   }) {
     return MaterialsCompanion(
       id: id ?? this.id,
@@ -1445,6 +1502,7 @@ class MaterialsCompanion extends UpdateCompanion<Material> {
       subjectId: subjectId ?? this.subjectId,
       filePath: filePath ?? this.filePath,
       createdAt: createdAt ?? this.createdAt,
+      isVectorized: isVectorized ?? this.isVectorized,
     );
   }
 
@@ -1469,6 +1527,9 @@ class MaterialsCompanion extends UpdateCompanion<Material> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (isVectorized.present) {
+      map['is_vectorized'] = Variable<bool>(isVectorized.value);
+    }
     return map;
   }
 
@@ -1480,7 +1541,8 @@ class MaterialsCompanion extends UpdateCompanion<Material> {
           ..write('description: $description, ')
           ..write('subjectId: $subjectId, ')
           ..write('filePath: $filePath, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('isVectorized: $isVectorized')
           ..write(')'))
         .toString();
   }
@@ -2619,6 +2681,7 @@ typedef $$MaterialsTableCreateCompanionBuilder =
       required int subjectId,
       required String filePath,
       required DateTime createdAt,
+      Value<bool> isVectorized,
     });
 typedef $$MaterialsTableUpdateCompanionBuilder =
     MaterialsCompanion Function({
@@ -2628,6 +2691,7 @@ typedef $$MaterialsTableUpdateCompanionBuilder =
       Value<int> subjectId,
       Value<String> filePath,
       Value<DateTime> createdAt,
+      Value<bool> isVectorized,
     });
 
 final class $$MaterialsTableReferences
@@ -2685,6 +2749,11 @@ class $$MaterialsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isVectorized => $composableBuilder(
+    column: $table.isVectorized,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2746,6 +2815,11 @@ class $$MaterialsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isVectorized => $composableBuilder(
+    column: $table.isVectorized,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$SubjectsTableOrderingComposer get subjectId {
     final $$SubjectsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -2795,6 +2869,11 @@ class $$MaterialsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get isVectorized => $composableBuilder(
+    column: $table.isVectorized,
+    builder: (column) => column,
+  );
 
   $$SubjectsTableAnnotationComposer get subjectId {
     final $$SubjectsTableAnnotationComposer composer = $composerBuilder(
@@ -2854,6 +2933,7 @@ class $$MaterialsTableTableManager
                 Value<int> subjectId = const Value.absent(),
                 Value<String> filePath = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<bool> isVectorized = const Value.absent(),
               }) => MaterialsCompanion(
                 id: id,
                 title: title,
@@ -2861,6 +2941,7 @@ class $$MaterialsTableTableManager
                 subjectId: subjectId,
                 filePath: filePath,
                 createdAt: createdAt,
+                isVectorized: isVectorized,
               ),
           createCompanionCallback:
               ({
@@ -2870,6 +2951,7 @@ class $$MaterialsTableTableManager
                 required int subjectId,
                 required String filePath,
                 required DateTime createdAt,
+                Value<bool> isVectorized = const Value.absent(),
               }) => MaterialsCompanion.insert(
                 id: id,
                 title: title,
@@ -2877,6 +2959,7 @@ class $$MaterialsTableTableManager
                 subjectId: subjectId,
                 filePath: filePath,
                 createdAt: createdAt,
+                isVectorized: isVectorized,
               ),
           withReferenceMapper:
               (p0) =>

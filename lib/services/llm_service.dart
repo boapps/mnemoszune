@@ -5,6 +5,7 @@ import 'package:mnemoszune/providers/settings_provider.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:langchain/langchain.dart';
 
 class LLMService {
   final AppSettings settings;
@@ -54,78 +55,6 @@ class LLMService {
       }
     } catch (e) {
       return 'Error: ${e.toString()}';
-    }
-  }
-
-  /// Generate embeddings for a single text input
-  Future<List<double>> generateEmbedding(String text) async {
-    final embeddings = await generateEmbeddings([text]);
-    return embeddings.isNotEmpty ? embeddings.first : [];
-  }
-
-  /// Generate embeddings for multiple text inputs
-  Future<List<List<double>>> generateEmbeddings(List<String> texts) async {
-    if (!settings.embeddingEnabled) {
-      throw Exception('Embeddings are not enabled in settings');
-    }
-
-    if (texts.isEmpty) {
-      return [];
-    }
-
-    try {
-      switch (settings.llmProvider) {
-        case LLMProvider.openai:
-          if (settings.openaiApiKey == null || settings.openaiApiKey!.isEmpty) {
-            throw Exception('OpenAI API key is missing');
-          }
-          // Use OpenAI API for embeddings
-          final client = _createOpenAIClient(
-            'https://api.openai.com/v1',
-            settings.openaiApiKey!,
-          );
-          return await client.embedMultiple(texts);
-
-        case LLMProvider.custom:
-          if (settings.customApiUrl == null || settings.customApiUrl!.isEmpty) {
-            throw Exception('Custom API URL is missing');
-          }
-          // Use custom OpenAI compatible API
-          final client = _createOpenAIClient(
-            settings.customApiUrl!,
-            settings.openaiApiKey ?? '',
-          );
-          return await client.embedMultiple(texts);
-
-        case LLMProvider.local:
-          // Check if separate embedding model is being used
-          final useEmbeddingServer =
-              settings.useSeperateEmbeddingModel &&
-              settings.embeddingModelPath != null;
-
-          // Validate appropriate server is running
-          if (useEmbeddingServer) {
-            if (!llm_server.isServerRunning(_embeddingServerId)) {
-              throw Exception(
-                'Embedding server is not running. Please start the server from Settings.',
-              );
-            }
-          } else if (!settings.isLocalServerRunning) {
-            throw Exception(
-              'Local model server is not running. Please start the server from Settings.',
-            );
-          }
-
-          // Create client for appropriate server
-          final client =
-              useEmbeddingServer
-                  ? _createLocalClient(isEmbeddingServer: true)
-                  : _createLocalClient();
-
-          return await client.embedMultiple(texts);
-      }
-    } catch (e) {
-      throw Exception('Embedding generation error: ${e.toString()}');
     }
   }
 

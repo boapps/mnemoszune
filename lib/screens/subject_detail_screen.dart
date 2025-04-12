@@ -20,6 +20,9 @@ class SubjectDetailScreen extends ConsumerStatefulWidget {
 class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final TextEditingController _searchController = TextEditingController();
+  List<dynamic> _searchResults = [];
+  bool _isSearching = false;
 
   @override
   void initState() {
@@ -30,7 +33,42 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _searchMaterials(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isSearching = true;
+    });
+
+    try {
+      final results = await ref
+          .read(materialNotifierProvider.notifier)
+          .searchMaterialsByContent(query);
+
+      setState(() {
+        _searchResults = results;
+        _isSearching = false;
+      });
+    } catch (e) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Search error: $e')));
+    }
   }
 
   @override
@@ -66,150 +104,282 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
       ),
       body: subjectAsync.when(
         data: (subject) {
-          return TabBarView(
-            controller: _tabController,
+          return Column(
             children: [
-              // Quizzes tab
-              quizzesAsync.when(
-                data: (quizzes) {
-                  if (quizzes.isEmpty) {
-                    return const Center(
-                      child: Text('No quizzes yet. Add your first quiz!'),
-                    );
-                  }
-
-                  return ListView.builder(
-                    itemCount: quizzes.length,
-                    itemBuilder: (context, index) {
-                      final quiz = quizzes[index];
-                      return ListTile(
-                        title: Text(quiz.title),
-                        subtitle:
-                            quiz.description != null
-                                ? Text(quiz.description!)
+              _tabController.index == 1
+                  ? Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Search in materials...',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon:
+                            _searchController.text.isNotEmpty
+                                ? IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() {
+                                      _searchResults = [];
+                                    });
+                                  },
+                                )
                                 : null,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) =>
-                                      QuizDetailScreen(quizId: quiz.id),
-                            ),
-                          );
-                        },
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete),
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              builder:
-                                  (context) => AlertDialog(
-                                    title: const Text('Delete Quiz'),
-                                    content: const Text(
-                                      'Are you sure you want to delete this quiz?',
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        child: const Text('CANCEL'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () {
-                                          ref
-                                              .read(
-                                                quizNotifierProvider.notifier,
-                                              )
-                                              .deleteQuiz(quiz.id);
-                                          Navigator.pop(context);
-                                        },
-                                        child: const Text('DELETE'),
-                                      ),
-                                    ],
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8.0),
+                        ),
+                      ),
+                      onSubmitted: (value) {
+                        _searchMaterials(value);
+                      },
+                    ),
+                  )
+                  : const SizedBox.shrink(),
+              _isSearching
+                  ? const LinearProgressIndicator()
+                  : const SizedBox(height: 4),
+              Expanded(
+                child:
+                    _tabController.index == 1 && _searchResults.isNotEmpty
+                        ? ListView.builder(
+                          itemCount: _searchResults.length,
+                          itemBuilder: (context, index) {
+                            final material = _searchResults[index];
+                            return ListTile(
+                              title: Text(material.title),
+                              subtitle:
+                                  material.description != null
+                                      ? Text(material.description!)
+                                      : null,
+                              leading: const Icon(Icons.insert_drive_file),
+                              trailing:
+                                  material.isVectorized
+                                      ? const Icon(
+                                        Icons.search,
+                                        color: Colors.green,
+                                      )
+                                      : null,
+                              onTap: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Opening ${material.title}'),
                                   ),
+                                );
+                              },
                             );
                           },
-                        ),
-                      );
-                    },
-                  );
-                },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error:
-                    (error, _) =>
-                        Center(child: Text('Error loading quizzes: $error')),
-              ),
-
-              // Materials tab
-              materialsAsync.when(
-                data: (materials) {
-                  if (materials.isEmpty) {
-                    return const Center(
-                      child: Text('No materials yet. Add your first material!'),
-                    );
-                  }
-
-                  return ListView.builder(
-                    itemCount: materials.length,
-                    itemBuilder: (context, index) {
-                      final material = materials[index];
-                      return ListTile(
-                        title: Text(material.title),
-                        subtitle:
-                            material.description != null
-                                ? Text(material.description!)
-                                : null,
-                        leading: const Icon(Icons.insert_drive_file),
-                        onTap: () {
-                          // Show file or open file
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Opening ${material.title}'),
-                            ),
-                          );
-                          // Add file opening logic here
-                        },
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete),
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              builder:
-                                  (context) => AlertDialog(
-                                    title: const Text('Delete Material'),
-                                    content: const Text(
-                                      'Are you sure you want to delete this material?',
+                        )
+                        : TabBarView(
+                          controller: _tabController,
+                          children: [
+                            quizzesAsync.when(
+                              data: (quizzes) {
+                                if (quizzes.isEmpty) {
+                                  return const Center(
+                                    child: Text(
+                                      'No quizzes yet. Add your first quiz!',
                                     ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        child: const Text('CANCEL'),
-                                      ),
-                                      TextButton(
+                                  );
+                                }
+
+                                return ListView.builder(
+                                  itemCount: quizzes.length,
+                                  itemBuilder: (context, index) {
+                                    final quiz = quizzes[index];
+                                    return ListTile(
+                                      title: Text(quiz.title),
+                                      subtitle:
+                                          quiz.description != null
+                                              ? Text(quiz.description!)
+                                              : null,
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (context) => QuizDetailScreen(
+                                                  quizId: quiz.id,
+                                                ),
+                                          ),
+                                        );
+                                      },
+                                      trailing: IconButton(
+                                        icon: const Icon(Icons.delete),
                                         onPressed: () {
-                                          ref
-                                              .read(
-                                                materialNotifierProvider
-                                                    .notifier,
-                                              )
-                                              .deleteMaterial(material.id);
-                                          Navigator.pop(context);
+                                          showDialog(
+                                            context: context,
+                                            builder:
+                                                (context) => AlertDialog(
+                                                  title: const Text(
+                                                    'Delete Quiz',
+                                                  ),
+                                                  content: const Text(
+                                                    'Are you sure you want to delete this quiz?',
+                                                  ),
+                                                  actions: [
+                                                    TextButton(
+                                                      onPressed:
+                                                          () => Navigator.pop(
+                                                            context,
+                                                          ),
+                                                      child: const Text(
+                                                        'CANCEL',
+                                                      ),
+                                                    ),
+                                                    TextButton(
+                                                      onPressed: () {
+                                                        ref
+                                                            .read(
+                                                              quizNotifierProvider
+                                                                  .notifier,
+                                                            )
+                                                            .deleteQuiz(
+                                                              quiz.id,
+                                                            );
+                                                        Navigator.pop(context);
+                                                      },
+                                                      child: const Text(
+                                                        'DELETE',
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                          );
                                         },
-                                        child: const Text('DELETE'),
                                       ),
-                                    ],
+                                    );
+                                  },
+                                );
+                              },
+                              loading:
+                                  () => const Center(
+                                    child: CircularProgressIndicator(),
                                   ),
-                            );
-                          },
+                              error:
+                                  (error, _) => Center(
+                                    child: Text(
+                                      'Error loading quizzes: $error',
+                                    ),
+                                  ),
+                            ),
+                            materialsAsync.when(
+                              data: (materials) {
+                                if (materials.isEmpty) {
+                                  return const Center(
+                                    child: Text(
+                                      'No materials yet. Add your first material!',
+                                    ),
+                                  );
+                                }
+
+                                return ListView.builder(
+                                  itemCount: materials.length,
+                                  itemBuilder: (context, index) {
+                                    final material = materials[index];
+                                    return ListTile(
+                                      title: Text(material.title),
+                                      subtitle:
+                                          material.description != null
+                                              ? Text(material.description!)
+                                              : null,
+                                      leading: const Icon(
+                                        Icons.insert_drive_file,
+                                      ),
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (material.isVectorized)
+                                            const Padding(
+                                              padding: EdgeInsets.only(
+                                                right: 8.0,
+                                              ),
+                                              child: Tooltip(
+                                                message: 'Searchable',
+                                                child: Icon(
+                                                  Icons.manage_search,
+                                                  color: Colors.green,
+                                                  size: 20,
+                                                ),
+                                              ),
+                                            ),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete),
+                                            onPressed: () {
+                                              showDialog(
+                                                context: context,
+                                                builder:
+                                                    (context) => AlertDialog(
+                                                      title: const Text(
+                                                        'Delete Material',
+                                                      ),
+                                                      content: const Text(
+                                                        'Are you sure you want to delete this material?',
+                                                      ),
+                                                      actions: [
+                                                        TextButton(
+                                                          onPressed:
+                                                              () =>
+                                                                  Navigator.pop(
+                                                                    context,
+                                                                  ),
+                                                          child: const Text(
+                                                            'CANCEL',
+                                                          ),
+                                                        ),
+                                                        TextButton(
+                                                          onPressed: () {
+                                                            ref
+                                                                .read(
+                                                                  materialNotifierProvider
+                                                                      .notifier,
+                                                                )
+                                                                .deleteMaterial(
+                                                                  material.id,
+                                                                );
+                                                            Navigator.pop(
+                                                              context,
+                                                            );
+                                                          },
+                                                          child: const Text(
+                                                            'DELETE',
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                              );
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                      onTap: () {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'Opening ${material.title}',
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  },
+                                );
+                              },
+                              loading:
+                                  () => const Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                              error:
+                                  (error, _) => Center(
+                                    child: Text(
+                                      'Error loading materials: $error',
+                                    ),
+                                  ),
+                            ),
+                          ],
                         ),
-                      );
-                    },
-                  );
-                },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error:
-                    (error, _) =>
-                        Center(child: Text('Error loading materials: $error')),
               ),
             ],
           );
@@ -222,7 +392,6 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
         onPressed: () {
           final currentIndex = _tabController.index;
           if (currentIndex == 0) {
-            // Quizzes tab
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -231,7 +400,6 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
               ),
             );
           } else {
-            // Materials tab
             Navigator.push(
               context,
               MaterialPageRoute(

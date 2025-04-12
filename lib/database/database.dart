@@ -43,6 +43,7 @@ class Materials extends Table {
   IntColumn get subjectId => integer().references(Subjects, #id)();
   TextColumn get filePath => text()();
   DateTimeColumn get createdAt => dateTime()();
+  BoolColumn get isVectorized => boolean().withDefault(const Constant(false))();
 }
 
 @DriftDatabase(tables: [Subjects, Quizzes, Exercises, Materials])
@@ -216,6 +217,24 @@ class AppDatabase extends _$AppDatabase {
               )
               .toList(),
     );
+  }
+
+  Future<List<model.StudyMaterial>> getMaterialsByIds(List<int> ids) async {
+    final query = select(materials)..where((tbl) => tbl.id.isIn(ids));
+    final results = await query.get();
+    return results
+        .map(
+          (row) => model.StudyMaterial(
+            id: row.id,
+            title: row.title,
+            description: row.description,
+            subjectId: row.subjectId,
+            filePath: row.filePath,
+            createdAt: row.createdAt,
+            isVectorized: row.isVectorized,
+          ),
+        )
+        .toList();
   }
 
   Future<int> insertMaterial(MaterialsCompanion entry) =>
