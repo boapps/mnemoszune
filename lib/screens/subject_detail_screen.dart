@@ -6,6 +6,8 @@ import 'package:mnemoszune/providers/material_provider.dart';
 import 'package:mnemoszune/screens/add_quiz_screen.dart';
 import 'package:mnemoszune/screens/quiz_detail_screen.dart';
 import 'package:mnemoszune/screens/add_material_screen.dart';
+import 'package:mnemoszune/services/vector_service.dart';
+import 'package:langchain/langchain.dart';
 
 class SubjectDetailScreen extends ConsumerStatefulWidget {
   final int subjectId;
@@ -21,8 +23,12 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _questionController = TextEditingController();
   List<dynamic> _searchResults = [];
   bool _isSearching = false;
+  bool _isAskingQuestion = false;
+  String? _questionAnswer;
+  bool _showFabMenu = false;
 
   @override
   void initState() {
@@ -34,6 +40,7 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
   void dispose() {
     _tabController.dispose();
     _searchController.dispose();
+    _questionController.dispose();
     super.dispose();
   }
 
@@ -69,6 +76,118 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
         context,
       ).showSnackBar(SnackBar(content: Text('Search error: $e')));
     }
+  }
+
+  Future<void> _askQuestion(String question) async {
+    if (question.trim().isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _isAskingQuestion = true;
+      _questionAnswer = null;
+    });
+
+    try {
+      final vectorService = ref.read(vectorServiceProvider);
+      final results = await vectorService.similaritySearch(question, k: 3);
+
+      if (results.isNotEmpty) {
+        final answer = results.map((doc) => doc.pageContent).join('\n\n');
+
+        setState(() {
+          _questionAnswer = answer;
+          _isAskingQuestion = false;
+        });
+      } else {
+        setState(() {
+          _questionAnswer =
+              "I couldn't find any relevant information for your question.";
+          _isAskingQuestion = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _questionAnswer = "Error finding answer: $e";
+        _isAskingQuestion = false;
+      });
+    }
+  }
+
+  void _showQuestionDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                title: const Text('Ask a Question'),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: _questionController,
+                        decoration: const InputDecoration(
+                          hintText: 'What would you like to know?',
+                          border: OutlineInputBorder(),
+                        ),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 16),
+                      if (_isAskingQuestion)
+                        const Center(child: CircularProgressIndicator())
+                      else if (_questionAnswer != null)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Answer:',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.blueGrey,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(_questionAnswer!),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('CLOSE'),
+                  ),
+                  TextButton(
+                    onPressed:
+                        _isAskingQuestion
+                            ? null
+                            : () {
+                              final question = _questionController.text;
+                              setDialogState(() {
+                                _isAskingQuestion = true;
+                              });
+                              _askQuestion(question).then((_) {
+                                setDialogState(() {});
+                              });
+                            },
+                    child: const Text('ASK'),
+                  ),
+                ],
+              );
+            },
+          ),
+    );
   }
 
   @override
@@ -388,29 +507,66 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
         error:
             (error, _) => Center(child: Text('Error loading subject: $error')),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          final currentIndex = _tabController.index;
-          if (currentIndex == 0) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder:
-                    (context) => AddQuizScreen(subjectId: widget.subjectId),
-              ),
-            );
-          } else {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder:
-                    (context) => AddMaterialScreen(subjectId: widget.subjectId),
-              ),
-            );
-          }
-        },
-        tooltip: 'Add',
-        child: const Icon(Icons.add),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_showFabMenu) ...[
+            FloatingActionButton.small(
+              heroTag: 'ask',
+              onPressed: () {
+                setState(() {
+                  _showFabMenu = false;
+                  _questionController.clear();
+                  _questionAnswer = null;
+                });
+                _showQuestionDialog();
+              },
+              tooltip: 'Ask a question',
+              child: const Icon(Icons.question_answer),
+            ),
+            const SizedBox(height: 8),
+            FloatingActionButton.small(
+              heroTag: 'add',
+              onPressed: () {
+                setState(() {
+                  _showFabMenu = false;
+                });
+                final currentIndex = _tabController.index;
+                if (currentIndex == 0) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (context) =>
+                              AddQuizScreen(subjectId: widget.subjectId),
+                    ),
+                  );
+                } else {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (context) =>
+                              AddMaterialScreen(subjectId: widget.subjectId),
+                    ),
+                  );
+                }
+              },
+              tooltip: 'Add',
+              child: const Icon(Icons.add),
+            ),
+            const SizedBox(height: 8),
+          ],
+          FloatingActionButton(
+            onPressed: () {
+              setState(() {
+                _showFabMenu = !_showFabMenu;
+              });
+            },
+            tooltip: _showFabMenu ? 'Close' : 'Menu',
+            child: Icon(_showFabMenu ? Icons.close : Icons.menu),
+          ),
+        ],
       ),
     );
   }
