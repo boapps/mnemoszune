@@ -43,12 +43,11 @@ class MaterialNotifier extends StateNotifier<AsyncValue<void>> {
         await vectorService.processAndStoreDocument(materialId, filePath);
 
         // Update material to mark it as vectorized
-        await database.updateMaterial(
-          MaterialsCompanion(id: Value(materialId), isVectorized: Value(true)),
-        );
-      } catch (e) {
+        await database.markMaterialAsVectorized(materialId);
+      } catch (e, s) {
         // Log the error but don't fail the whole operation
-        print('Failed to vectorize document: $e');
+        print('Error processing document for vector storage: $e');
+        print('Stack trace: $s');
         // Material is still added but not vectorized
       }
 

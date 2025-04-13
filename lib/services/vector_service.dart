@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:langchain/langchain.dart';
 import 'package:langchain_openai/langchain_openai.dart';
-import 'package:langchain_chroma/langchain_chroma.dart';
+import 'package:langchain_community/langchain_community.dart';
 import 'package:mnemoszune/models/settings.dart';
 import 'package:mnemoszune/providers/settings_provider.dart';
 import 'package:mnemoszune/services/llm_service.dart';
@@ -11,7 +11,7 @@ import 'package:path/path.dart' as path;
 class VectorService {
   final LLMService llmService;
   final AppSettings settings;
-  late Chroma _vectorStore;
+  late ObjectBoxVectorStore _vectorStore;
 
   VectorService({required this.llmService, required this.settings}) {
     _initializeVectorStore();
@@ -23,11 +23,15 @@ class VectorService {
       apiKey: settings.openaiApiKey,
       baseUrl:
           settings.useSeperateEmbeddingModel
-              ? 'http://localhost:8081'
+              ? 'http://localhost:8081/v1'
               : 'https://api.openai.com/v1',
     );
     // Initialize memory vector store with the embeddings
-    _vectorStore = Chroma(embeddings: embeddings);
+    _vectorStore = ObjectBoxVectorStore(
+      embeddings: embeddings,
+      dimensions: 512,
+      directory: "vector_store",
+    );
   }
 
   Future<void> processAndStoreDocument(int materialId, String filePath) async {
@@ -37,39 +41,46 @@ class VectorService {
     }
 
     // Extract text from document based on file type
-    final text = await _extractTextFromFile(file);
-    if (text.isEmpty) {
-      throw Exception('Could not extract text from file');
-    }
-
+    List<Document> documents = await _extractTextFromFile(file);
     // Create Document with metadata
-    final document = Document(
-      pageContent: text,
-      metadata: {'materialId': materialId, 'filePath': filePath},
-    );
 
-    await _vectorStore.addDocuments(documents: [document]);
+    await _vectorStore.addDocuments(documents: documents);
   }
 
-  Future<String> _extractTextFromFile(File file) async {
+  Future<List<Document>> txtToDocuments(String filePath) async {
+    print('Extracting text from file: $filePath');
+
+    var loader = TextLoader(filePath);
+    List<Document> documents = await loader.load();
+    const textSplitter = RecursiveCharacterTextSplitter(
+      chunkSize: 800,
+      chunkOverlap: 20,
+    );
+
+    List<Document> docs = textSplitter.splitDocuments(documents);
+
+    return docs;
+  }
+
+  Future<List<Document>> _extractTextFromFile(File file) async {
     final extension = path.extension(file.path).toLowerCase();
 
     // Basic text extraction based on file type
     // In a real implementation, you would use specialized libraries for PDF, DOCX, etc.
     switch (extension) {
       case '.txt':
-        return await file.readAsString();
-      case '.md':
-        return await file.readAsString();
+        return await txtToDocuments(file.path);
+      // case '.md':
+      // return await file.readAsString();
       // Add more file type handlers as needed
       default:
         // For this example, just try to read as text
         // In a real app, you'd need proper extractors for various file types
-        try {
-          return await file.readAsString();
-        } catch (e) {
-          throw Exception('Unsupported file type: $extension');
-        }
+        // try {
+        //   return await file.readAsString();
+        // } catch (e) {
+        throw Exception('Unsupported file type: $extension');
+      // }
     }
   }
 

@@ -243,6 +243,12 @@ class AppDatabase extends _$AppDatabase {
       update(materials).replace(entry);
   Future<int> deleteMaterial(int id) =>
       (delete(materials)..where((m) => m.id.equals(id))).go();
+
+  Future<void> markMaterialAsVectorized(int id) async {
+    await (update(materials)..where(
+      (m) => m.id.equals(id),
+    )).write(MaterialsCompanion(isVectorized: const Value(true)));
+  }
 }
 
 LazyDatabase _openConnection() {
