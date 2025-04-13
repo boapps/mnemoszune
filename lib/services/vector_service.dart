@@ -7,11 +7,16 @@ import 'package:mnemoszune/models/settings.dart';
 import 'package:mnemoszune/providers/settings_provider.dart';
 import 'package:mnemoszune/services/llm_service.dart';
 import 'package:path/path.dart' as path;
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 class VectorService {
   final LLMService llmService;
   final AppSettings settings;
   late ObjectBoxVectorStore _vectorStore;
+  final _textSplitter = RecursiveCharacterTextSplitter(
+    chunkSize: 400,
+    chunkOverlap: 20,
+  );
 
   VectorService({required this.llmService, required this.settings}) {
     _initializeVectorStore();
@@ -47,19 +52,44 @@ class VectorService {
     await _vectorStore.addDocuments(documents: documents);
   }
 
-  Future<List<Document>> txtToDocuments(String filePath) async {
+  Future<List<Document>> _txtToDocuments(String filePath) async {
     print('Extracting text from file: $filePath');
 
     var loader = TextLoader(filePath);
     List<Document> documents = await loader.load();
-    const textSplitter = RecursiveCharacterTextSplitter(
-      chunkSize: 800,
-      chunkOverlap: 20,
-    );
 
-    List<Document> docs = textSplitter.splitDocuments(documents);
+    List<Document> docs = _textSplitter.splitDocuments(documents);
 
     return docs;
+  }
+
+  Future<List<Document>> _pdfToDocuments(String filePath) async {
+    print('Extracting text from PDF: $filePath');
+
+    //Load an existing PDF document.
+    PdfDocument document = PdfDocument(
+      inputBytes: File(filePath).readAsBytesSync(),
+    );
+    //Extract the text from page 1.
+    List<Document> docs = [];
+    for (int i = 0; i < document.pages.count; i++) {
+      String text = PdfTextExtractor(
+        document,
+      ).extractText(startPageIndex: i, endPageIndex: i);
+      docs.add(
+        Document(
+          pageContent: text,
+          metadata: {
+            'page': i,
+            'materialId': 0, // TODO
+          },
+        ),
+      );
+    }
+    document.dispose();
+    List<Document> splitDocs = _textSplitter.splitDocuments(docs);
+
+    return splitDocs;
   }
 
   Future<List<Document>> _extractTextFromFile(File file) async {
@@ -69,18 +99,17 @@ class VectorService {
     // In a real implementation, you would use specialized libraries for PDF, DOCX, etc.
     switch (extension) {
       case '.txt':
-        return await txtToDocuments(file.path);
-      // case '.md':
-      // return await file.readAsString();
-      // Add more file type handlers as needed
+        return await _txtToDocuments(file.path);
+      case '.md':
+        return await _txtToDocuments(file.path);
+      case '.pdf':
+        return await _pdfToDocuments(file.path);
       default:
-        // For this example, just try to read as text
-        // In a real app, you'd need proper extractors for various file types
-        // try {
-        //   return await file.readAsString();
-        // } catch (e) {
-        throw Exception('Unsupported file type: $extension');
-      // }
+        try {
+          return await _txtToDocuments(file.path);
+        } catch (e) {
+          throw Exception('Unsupported file type: $extension');
+        }
     }
   }
 
