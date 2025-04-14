@@ -4,6 +4,7 @@ import 'package:mnemoszune/providers/subject_provider.dart';
 import 'package:mnemoszune/screens/subject_detail_screen.dart';
 import 'package:mnemoszune/screens/add_subject_screen.dart';
 import 'package:mnemoszune/screens/settings_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -27,6 +28,13 @@ class HomeScreen extends ConsumerWidget {
               );
             },
             tooltip: 'Settings',
+          ),
+          IconButton(
+            icon: const Icon(Icons.import_export),
+            tooltip: "Import moodle",
+            onPressed: () {
+              _showMoodleUrlDialog(context);
+            },
           ),
         ],
       ),
@@ -107,6 +115,96 @@ class HomeScreen extends ConsumerWidget {
         tooltip: 'Add Subject',
         child: const Icon(Icons.add),
       ),
+    );
+  }
+
+  void _showMoodleUrlDialog(BuildContext context) {
+    final TextEditingController urlController = TextEditingController();
+    final GlobalKey<FormState> formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Enter Moodle URL'),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              controller: urlController,
+              decoration: const InputDecoration(
+                hintText: 'https://edu.vik.bme.hu/',
+                labelText: 'Moodle URL',
+              ),
+              keyboardType: TextInputType.url,
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter a URL';
+                }
+
+                // Simple URL validation
+                final Uri? uri = Uri.tryParse(value);
+                if (uri == null ||
+                    !uri.isAbsolute ||
+                    (!uri.scheme.startsWith('http'))) {
+                  return 'Please enter a valid URL starting with http:// or https://';
+                }
+                return null;
+              },
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('CANCEL'),
+            ),
+            TextButton(
+              onPressed: () async {
+                if (formKey.currentState?.validate() ?? false) {
+                  Navigator.pop(context);
+
+                  final url = urlController.text.trim();
+                  try {
+                    final uri = Uri.parse(url);
+                    final loginUrl = uri.replace(
+                      path: '/admin/tool/mobile/launch.php',
+                      query:
+                          'service=moodle_mobile_app&passport=12345&urlscheme=moodledl',
+                    );
+                    if (!await launchUrl(
+                      loginUrl,
+                      mode: LaunchMode.externalApplication,
+                    )) {
+                      _showErrorDialog(context, 'Could not launch $url');
+                    }
+                  } catch (e) {
+                    _showErrorDialog(context, 'Error launching URL: $e');
+                  }
+                }
+              },
+              child: const Text('OPEN'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showErrorDialog(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Error'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
     );
   }
 }
