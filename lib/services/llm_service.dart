@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:langchain_openai/langchain_openai.dart';
 import 'package:llm_server_dart/llm_server_dart.dart' as llm_server;
 import 'package:mnemoszune/models/settings.dart';
 import 'package:mnemoszune/providers/settings_provider.dart';
@@ -18,63 +19,25 @@ class LLMService {
 
   LLMService(this.settings);
 
-  Future<String> generateResponse(String prompt) async {
-    try {
-      switch (settings.llmProvider) {
-        case LLMProvider.openai:
-          if (settings.openaiApiKey == null || settings.openaiApiKey!.isEmpty) {
-            throw Exception('OpenAI API key is missing');
-          }
-          // Use OpenAI API
-          final client = _createOpenAIClient(
-            'https://api.openai.com/v1',
-            settings.openaiApiKey!,
-          );
-          return await client.complete(prompt);
-
-        case LLMProvider.custom:
-          if (settings.customApiUrl == null || settings.customApiUrl!.isEmpty) {
-            throw Exception('Custom API URL is missing');
-          }
-          // Use custom OpenAI compatible API
-          final client = _createOpenAIClient(
-            settings.customApiUrl!,
-            settings.openaiApiKey ?? '',
-          );
-          return await client.complete(prompt);
-
-        case LLMProvider.local:
-          if (!settings.isLocalServerRunning) {
-            throw Exception(
-              'Local model server is not running. Please start the server from Settings.',
-            );
-          }
-          // Use the local server
-          final client = _createLocalClient();
-          return await client.complete(prompt);
-      }
-    } catch (e) {
-      return 'Error: ${e.toString()}';
+  ChatOpenAI getLLM() {
+    if (settings.llmProvider == LLMProvider.local) {
+      return ChatOpenAI(
+        apiKey: settings.openaiApiKey,
+        baseUrl: _mainHttpBaseUrl,
+      );
+    } else if (settings.llmProvider == LLMProvider.openai) {
+      return ChatOpenAI(
+        apiKey: settings.openaiApiKey,
+        baseUrl: 'https://api.openai.com/v1',
+      );
+    } else if (settings.llmProvider == LLMProvider.custom) {
+      return ChatOpenAI(
+        apiKey: settings.openaiApiKey,
+        baseUrl: settings.customApiUrl ?? 'https://api.openai.com/v1',
+      );
+    } else {
+      throw Exception('Unsupported LLM provider');
     }
-  }
-
-  OpenAIClient _createOpenAIClient(String endpoint, String apiKey) {
-    return OpenAIClient(
-      endpoint: endpoint,
-      apiKey: apiKey,
-      temperature: settings.temperature,
-      maxTokens: settings.maxTokens,
-    );
-  }
-
-  LocalClient _createLocalClient({bool isEmbeddingServer = false}) {
-    final endpoint =
-        isEmbeddingServer ? _embeddingHttpBaseUrl : _mainHttpBaseUrl;
-    return LocalClient(
-      endpoint: endpoint,
-      temperature: settings.temperature,
-      maxTokens: settings.maxTokens,
-    );
   }
 
   // Start the main model server
@@ -160,109 +123,6 @@ class LLMService {
         // Ignore errors during cleanup
       }
       _isEmbeddingServerManuallyStarted = false;
-    }
-  }
-}
-
-// Update OpenAIClient to use correct embeddings API
-class OpenAIClient {
-  final String endpoint;
-  final String apiKey;
-  final double temperature;
-  final int maxTokens;
-
-  OpenAIClient({
-    required this.endpoint,
-    required this.apiKey,
-    required this.temperature,
-    required this.maxTokens,
-  });
-
-  Future<String> complete(String prompt) async {
-    // Implementation would use standard HTTP client to call the OpenAI API
-    // This is a placeholder for the actual implementation
-    await Future.delayed(const Duration(seconds: 1)); // Simulate API call
-    return "Response for: $prompt (using OpenAI API)";
-  }
-
-  Future<List<List<double>>> embedMultiple(List<String> texts) async {
-    final url = Uri.parse('$endpoint/embeddings');
-
-    final response = await http.post(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $apiKey',
-      },
-      body: jsonEncode({
-        'input': texts,
-        'model':
-            'text-embedding-ada-002', // Default OpenAI model for embeddings
-        'encoding_format': 'float',
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      final jsonResponse = jsonDecode(response.body);
-      final data = jsonResponse['data'] as List;
-
-      // Extract embeddings from each result
-      return data.map<List<double>>((item) {
-        final embedding = item['embedding'] as List;
-        return embedding.map<double>((value) => value as double).toList();
-      }).toList();
-    } else {
-      throw Exception('Failed to generate embeddings: ${response.body}');
-    }
-  }
-}
-
-// Update LocalClient to use correct embeddings API
-class LocalClient {
-  final String endpoint;
-  final double temperature;
-  final int maxTokens;
-
-  LocalClient({
-    required this.endpoint,
-    required this.temperature,
-    required this.maxTokens,
-  });
-
-  Future<String> complete(String prompt) async {
-    // Implementation would use standard HTTP client to call the local server
-    // This is a placeholder for the actual implementation
-    await Future.delayed(const Duration(seconds: 1)); // Simulate API call
-    return "Response for: $prompt (using local server)";
-  }
-
-  Future<List<List<double>>> embedMultiple(List<String> texts) async {
-    final url = Uri.parse('$endpoint/embeddings');
-
-    final response = await http.post(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer no-key', // As shown in the example
-      },
-      body: jsonEncode({
-        'input': texts,
-        'model': 'GPT-4', // Placeholder model name
-        'encoding_format': 'float',
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      final jsonResponse = jsonDecode(response.body);
-      final data = jsonResponse['data'] as List;
-
-      // Extract embeddings from each result
-      return data.map<List<double>>((item) {
-        final embedding = item['embedding'] as List;
-        return embedding.map<double>((value) => value as double).toList();
-      }).toList();
-    } else {
-      throw Exception('Failed to generate embeddings: ${response.body}');
     }
   }
 }

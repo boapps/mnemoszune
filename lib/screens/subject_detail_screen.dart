@@ -6,6 +6,7 @@ import 'package:mnemoszune/providers/material_provider.dart';
 import 'package:mnemoszune/screens/add_quiz_screen.dart';
 import 'package:mnemoszune/screens/quiz_detail_screen.dart';
 import 'package:mnemoszune/screens/add_material_screen.dart';
+import 'package:mnemoszune/services/llm_service.dart';
 import 'package:mnemoszune/services/vector_service.dart';
 import 'package:langchain/langchain.dart';
 
@@ -28,6 +29,7 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
   bool _isSearching = false;
   bool _isAskingQuestion = false;
   String? _questionAnswer;
+  String? _questionContext;
   bool _showFabMenu = false;
 
   @override
@@ -93,10 +95,32 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
       final results = await vectorService.similaritySearch(question, k: 3);
 
       if (results.isNotEmpty) {
-        final answer = results.map((doc) => doc.pageContent).join('\n\n');
+        final context = results.map((doc) => doc.pageContent).join('\n\n');
 
         setState(() {
-          _questionAnswer = answer;
+          _questionContext = context;
+          //   _questionAnswer = context;
+          //   _isAskingQuestion = false;
+        });
+
+        final llmService = ref.read(llmServiceProvider);
+        final llm = llmService.getLLM();
+        final prompt = PromptTemplate(
+          template:
+              'Based on the following context, answer the question:\n\n'
+              '$context\n\nQuestion: $question\nAnswer:',
+          inputVariables: {'context', 'question'},
+        );
+        final chain = LLMChain(llm: llm, prompt: prompt);
+        final answer = await chain.call({
+          'context': context,
+          'question': question,
+        });
+        print("answer");
+        print(answer['output']);
+        print(answer['output']['content']);
+        setState(() {
+          _questionAnswer = answer['output']['content'];
           _isAskingQuestion = false;
         });
       } else {
@@ -157,6 +181,28 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(_questionAnswer!),
+                            ),
+                          ],
+                        ),
+                      if (_questionContext != null)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Context:',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.blueGrey,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(_questionContext!),
                             ),
                           ],
                         ),
