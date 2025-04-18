@@ -30,7 +30,7 @@ class HomeScreen extends ConsumerWidget {
             tooltip: 'Settings',
           ),
           IconButton(
-            icon: const Icon(Icons.import_export),
+            icon: const Icon(Icons.download),
             tooltip: "Import moodle",
             onPressed: () {
               _showMoodleUrlDialog(context);
@@ -169,7 +169,7 @@ class HomeScreen extends ConsumerWidget {
                     final loginUrl = uri.replace(
                       path: '/admin/tool/mobile/launch.php',
                       query:
-                          'service=moodle_mobile_app&passport=12345&urlscheme=moodledl',
+                          'service=moodle_mobile_app&passport=12345&urlscheme=mnemoszune',
                     );
                     if (!await launchUrl(
                       loginUrl,

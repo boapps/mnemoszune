@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Name=Mnemoszune
+GenericName=Learning Management Tool
+Comment=A Learning Management System application
+Exec=/home/boa/AndroidStudioProjects/mnemoszune/build/linux/x64/release/bundle/mnemoszune %U
+Icon=mnemoszune
+Terminal=false
+Categories=Education;Learning;
+Keywords=education;learning;moodle;
+StartupNotify=true
+MimeType=x-scheme-handler/mnemoszune;
+Actions=NewWindow;
+
+[Desktop Action NewWindow]
+Name=New Window
+Exec=/home/boa/AndroidStudioProjects/mnemoszune/build/linux/x64/release/bundle/mnemoszune
