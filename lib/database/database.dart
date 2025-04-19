@@ -79,6 +79,21 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  Future<List<model.Subject>> getSubjectsByName(String name) async {
+    final results =
+        await (select(subjects)..where((s) => s.name.equals(name))).get();
+    return results
+        .map(
+          (row) => model.Subject(
+            id: row.id,
+            name: row.name,
+            description: row.description,
+            createdAt: row.createdAt,
+          ),
+        )
+        .toList();
+  }
+
   Future<int> insertSubject(SubjectsCompanion entry) =>
       into(subjects).insert(entry);
   Future<bool> updateSubject(SubjectsCompanion entry) =>

@@ -1,11 +1,15 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mnemoszune/providers/database_provider.dart';
 import 'package:mnemoszune/screens/home_screen.dart';
 import 'package:mnemoszune/providers/settings_provider.dart';
 import 'package:app_links/app_links.dart';
 import 'package:http/http.dart' as http;
+import 'package:mnemoszune/database/database.dart';
+import 'package:drift/drift.dart' as drift;
 
 void main() {
   runApp(const ProviderScope(child: MnemoszuneApp()));
@@ -97,28 +101,65 @@ class _MnemoszuneAppState extends ConsumerState<MnemoszuneApp> {
       Uri.parse('https://edu.vik.bme.hu/webservice/rest/server.php'),
       body: params,
     );
-    print(response);
+    // write response.body to file
     final data = jsonDecode(response.body);
-    print(data);
     final userId = data['userid'];
-    print(userId);
   }
 
   void getCourses(String token) async {
     final params = {
       'wstoken': token,
-      'wsfunction': 'core_course_get_courses',
+      'wsfunction': 'core_course_get_courses_by_field',
       'moodlewsrestformat': 'json',
     };
     final response = await http.post(
       Uri.parse('https://edu.vik.bme.hu/webservice/rest/server.php'),
       body: params,
     );
-    print(response);
     final data = jsonDecode(response.body);
-    print(data);
     final courses = data['courses'];
-    print(courses);
+
+    final visibleCourses =
+        courses.where((course) => course['visible'] == 1).toList();
+    print(visibleCourses);
+
+    // Save visible courses to the database
+    await _saveCoursesToDatabase(visibleCourses);
+  }
+
+  Future<void> _saveCoursesToDatabase(List<dynamic> courses) async {
+    final database = ref.watch(databaseProvider);
+    int newSubjectsAdded = 0;
+    int existingSubjectsNumber = 0;
+
+    for (final course in courses) {
+      try {
+        final courseName = course['fullname'];
+
+        // Check if a subject with this name already exists
+        final existingSubjects = await database.getSubjectsByName(courseName);
+
+        if (existingSubjects.isEmpty) {
+          // Create a new Subject entry from the course data
+          final subjectEntry = SubjectsCompanion(
+            name: drift.Value(courseName),
+            description: drift.Value(course['summary'] ?? ''),
+            createdAt: drift.Value(DateTime.now()),
+          );
+
+          // Insert the subject into the database
+          await database.insertSubject(subjectEntry);
+          newSubjectsAdded++;
+        } else {
+          existingSubjectsNumber++;
+        }
+      } catch (e) {
+        print('Error processing course: $e');
+      }
+    }
+
+    print('Saved $newSubjectsAdded new courses to database as subjects');
+    print('Skipped $existingSubjectsNumber courses that already existed');
   }
 
   @override
