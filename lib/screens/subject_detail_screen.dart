@@ -91,7 +91,13 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
     });
 
     try {
-      final vectorService = ref.read(vectorServiceProvider);
+      // Handle the async value properly
+      final vectorServiceAsync = ref.read(vectorServiceProvider);
+      if (!vectorServiceAsync.hasValue) {
+        throw Exception("Vector service is not ready yet");
+      }
+
+      final vectorService = vectorServiceAsync.value!;
       final results = await vectorService.similaritySearch(question, k: 3);
 
       if (results.isNotEmpty) {

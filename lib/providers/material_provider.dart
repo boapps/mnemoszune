@@ -112,9 +112,20 @@ class MaterialNotifier extends StateNotifier<AsyncValue<void>> {
   }
 }
 
-final materialNotifierProvider =
-    StateNotifierProvider<MaterialNotifier, AsyncValue<void>>((ref) {
-      final database = ref.watch(databaseProvider);
-      final vectorService = ref.watch(vectorServiceProvider);
-      return MaterialNotifier(database, vectorService);
-    });
+final materialNotifierProvider = StateNotifierProvider<
+  MaterialNotifier,
+  AsyncValue<void>
+>((ref) {
+  final database = ref.watch(databaseProvider);
+  final vectorService = ref.watch(vectorServiceProvider).valueOrNull;
+
+  // If vectorService is not ready yet, return a placeholder that shows loading state
+  if (vectorService == null) {
+    return MaterialNotifier(
+      database,
+      throw UnimplementedError('VectorService is not initialized yet'),
+    );
+  }
+
+  return MaterialNotifier(database, vectorService);
+});

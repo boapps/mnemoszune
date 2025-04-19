@@ -13,17 +13,22 @@ import 'package:syncfusion_flutter_pdf/pdf.dart';
 class VectorService {
   final LLMService llmService;
   final AppSettings settings;
+  final String appdir;
   late ObjectBoxVectorStore _vectorStore;
   final _textSplitter = RecursiveCharacterTextSplitter(
     chunkSize: 400,
     chunkOverlap: 20,
   );
 
-  VectorService({required this.llmService, required this.settings}) {
-    _initializeVectorStore();
+  VectorService({
+    required this.llmService,
+    required this.settings,
+    required this.appdir,
+  }) {
+    _initializeVectorStore(appdir);
   }
 
-  void _initializeVectorStore() {
+  void _initializeVectorStore(String appdir) {
     // Create an Embeddings implementation based on the current settings
     final embeddings = OpenAIEmbeddings(
       apiKey: settings.openaiApiKey,
@@ -33,13 +38,11 @@ class VectorService {
               : 'https://api.openai.com/v1',
     );
     // Initialize memory vector store with the embeddings
-    getApplicationSupportDirectory().then((directory) {
-      _vectorStore = ObjectBoxVectorStore(
-        embeddings: embeddings,
-        dimensions: 512,
-        directory: '$directory/vector_store',
-      );
-    });
+    _vectorStore = ObjectBoxVectorStore(
+      embeddings: embeddings,
+      dimensions: 512,
+      directory: '$appdir/vector_store',
+    );
   }
 
   Future<void> processAndStoreDocument(int materialId, String filePath) async {
@@ -125,9 +128,14 @@ class VectorService {
 }
 
 // Provider for the vector service
-final vectorServiceProvider = Provider<VectorService>((ref) {
+final vectorServiceProvider = FutureProvider<VectorService>((ref) async {
   final llmService = ref.watch(llmServiceProvider);
   final settings = ref.watch(settingsProvider);
+  final appdir = await getApplicationSupportDirectory();
 
-  return VectorService(llmService: llmService, settings: settings);
+  return VectorService(
+    llmService: llmService,
+    settings: settings,
+    appdir: appdir.path,
+  );
 });

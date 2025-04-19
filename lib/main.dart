@@ -26,11 +26,19 @@ class MnemoszuneApp extends ConsumerStatefulWidget {
 
 class _MnemoszuneAppState extends ConsumerState<MnemoszuneApp> {
   final _appLinks = AppLinks();
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  bool _isAppReady = false;
 
   @override
   void initState() {
     super.initState();
-    _initAppLinks();
+    // Add a small delay to ensure the app is ready before processing deeplinks
+    Future.delayed(Duration(milliseconds: 500), () {
+      setState(() {
+        _isAppReady = true;
+      });
+      _initAppLinks();
+    });
   }
 
   Future<void> _initAppLinks() async {
@@ -50,6 +58,25 @@ class _MnemoszuneAppState extends ConsumerState<MnemoszuneApp> {
   void _handleAppLink(String uri) {
     print('Received app link: $uri');
     if (uri.startsWith('mnemoszune://')) {
+      // Only attempt to show dialog if app is ready
+      if (_isAppReady && _navigatorKey.currentContext != null) {
+        showDialog(
+          context: _navigatorKey.currentContext!,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              content: Row(
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(width: 20),
+                  Text('Processing Moodle data...'),
+                ],
+              ),
+            );
+          },
+        );
+      }
+
       try {
         // Check if the URL contains a token parameter
         if (uri.contains('token=')) {
@@ -70,28 +97,84 @@ class _MnemoszuneAppState extends ConsumerState<MnemoszuneApp> {
             final token = tokenString.split(':::')[1];
             print('Successfully extracted token: $token');
 
-            loginToMoodle(token);
-            processCourses(token);
+            // Process data asynchronously
+            Future.wait([loginToMoodle(token), processCourses(token)])
+                .then((_) {
+                  // Close the dialog when processing is complete
+                  if (_isAppReady && _navigatorKey.currentState != null) {
+                    Navigator.of(
+                      _navigatorKey.currentContext!,
+                      rootNavigator: true,
+                    ).pop();
+                  }
+                })
+                .catchError((error) {
+                  // Close dialog and show error if needed
+                  if (_isAppReady && _navigatorKey.currentState != null) {
+                    Navigator.of(
+                      _navigatorKey.currentContext!,
+                      rootNavigator: true,
+                    ).pop();
+                    _showErrorDialog('Error processing Moodle data: $error');
+                  }
+                });
           } else {
             print('Token string does not have expected format: $tokenString');
+            if (_isAppReady && _navigatorKey.currentState != null) {
+              Navigator.of(
+                _navigatorKey.currentContext!,
+                rootNavigator: true,
+              ).pop();
+              _showErrorDialog('Invalid token format');
+            }
           }
         } else {
           print('URL does not contain a token parameter: $uri');
+          if (_isAppReady && _navigatorKey.currentState != null) {
+            Navigator.of(
+              _navigatorKey.currentContext!,
+              rootNavigator: true,
+            ).pop();
+            _showErrorDialog('No token found in the link');
+          }
         }
       } catch (e) {
         print('Error processing app link: $e');
-        // Continue app execution even if link processing fails
+        // Close dialog and show error
+        if (_isAppReady && _navigatorKey.currentState != null) {
+          Navigator.of(
+            _navigatorKey.currentContext!,
+            rootNavigator: true,
+          ).pop();
+          _showErrorDialog('Error processing link: $e');
+        }
       }
-
-      // You can parse the URI further and navigate to appropriate screens
-      // For example:
-      // final path = uri.path;
-      // final queryParams = uri.queryParameters;
-      // Navigate based on these values
     }
   }
 
-  void loginToMoodle(String token) async {
+  // Helper method to show error dialog
+  void _showErrorDialog(String message) {
+    if (_isAppReady && _navigatorKey.currentContext != null) {
+      showDialog(
+        context: _navigatorKey.currentContext!,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Error'),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+    }
+  }
+
+  // Update these methods to return Future for proper async handling
+  Future<void> loginToMoodle(String token) async {
     final params = {
       'wstoken': token,
       'wsfunction': 'core_webservice_get_site_info',
@@ -106,7 +189,7 @@ class _MnemoszuneAppState extends ConsumerState<MnemoszuneApp> {
     final userId = data['userid'];
   }
 
-  void processCourses(String token) async {
+  Future<void> processCourses(String token) async {
     final params = {
       'wstoken': token,
       'wsfunction': 'core_course_get_courses_by_field',
@@ -142,7 +225,12 @@ class _MnemoszuneAppState extends ConsumerState<MnemoszuneApp> {
     print(data);
 
     final database = ref.watch(databaseProvider);
-    final vectorService = ref.watch(vectorServiceProvider);
+    final vectorServiceAsync = ref.read(vectorServiceProvider);
+    if (!vectorServiceAsync.hasValue) {
+      throw Exception("Vector service is not ready yet");
+    }
+
+    final vectorService = vectorServiceAsync.value!;
 
     // Process each section
     for (var section in data) {
@@ -278,6 +366,7 @@ class _MnemoszuneAppState extends ConsumerState<MnemoszuneApp> {
     final settings = ref.watch(settingsProvider);
 
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'Mnemoszune',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
