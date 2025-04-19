@@ -10,6 +10,8 @@ import 'package:app_links/app_links.dart';
 import 'package:http/http.dart' as http;
 import 'package:mnemoszune/database/database.dart';
 import 'package:drift/drift.dart' as drift;
+import 'package:mnemoszune/services/vector_service.dart';
+import 'package:path_provider/path_provider.dart';
 
 void main() {
   runApp(const ProviderScope(child: MnemoszuneApp()));
@@ -69,9 +71,7 @@ class _MnemoszuneAppState extends ConsumerState<MnemoszuneApp> {
             print('Successfully extracted token: $token');
 
             loginToMoodle(token);
-            getCourses(token);
-
-            // TODO: Store the token for authentication or navigate to login screen
+            processCourses(token);
           } else {
             print('Token string does not have expected format: $tokenString');
           }
@@ -106,7 +106,7 @@ class _MnemoszuneAppState extends ConsumerState<MnemoszuneApp> {
     final userId = data['userid'];
   }
 
-  void getCourses(String token) async {
+  void processCourses(String token) async {
     final params = {
       'wstoken': token,
       'wsfunction': 'core_course_get_courses_by_field',
@@ -124,10 +124,118 @@ class _MnemoszuneAppState extends ConsumerState<MnemoszuneApp> {
     print(visibleCourses);
 
     // Save visible courses to the database
-    await _saveCoursesToDatabase(visibleCourses);
+    await _saveCoursesToDatabase(visibleCourses, token);
   }
 
-  Future<void> _saveCoursesToDatabase(List<dynamic> courses) async {
+  void saveCourseContent(String token, int courseId, int subjectId) async {
+    final params = {
+      'wstoken': token,
+      'wsfunction': 'core_course_get_contents',
+      'moodlewsrestformat': 'json',
+      'courseid': courseId.toString(),
+    };
+    final response = await http.post(
+      Uri.parse('https://edu.vik.bme.hu/webservice/rest/server.php'),
+      body: params,
+    );
+    List<dynamic> data = jsonDecode(response.body);
+    print(data);
+
+    final database = ref.watch(databaseProvider);
+    final vectorService = ref.watch(vectorServiceProvider);
+
+    // Process each section
+    for (var section in data) {
+      final sectionName = section['name'];
+      final sectionId = section['id'];
+      final isVisible = section['visible'] == 1;
+
+      if (!isVisible) continue;
+
+      print('Processing section: $sectionName');
+
+      // Process modules within this section
+      if (section['modules'] != null) {
+        for (var module in section['modules']) {
+          final moduleName = module['name'];
+          final moduleId = module['id'];
+          final moduleType = module['modname'];
+          final moduleUrl = module['url'];
+          final isModuleVisible =
+              module['visible'] == 1 && module['uservisible'] == true;
+
+          if (!isModuleVisible) continue;
+
+          print('  - Module: $moduleName ($moduleType)');
+
+          // Process content files if they exist
+          if (module['contents'] != null) {
+            for (var content in module['contents']) {
+              final fileUrl = content['fileurl'];
+              final fileName = content['filename'];
+              final filePath = content['filepath'];
+
+              if (content['type'] != 'file') continue;
+              if (fileUrl == null || fileName == null) continue;
+              if (fileUrl.isEmpty || fileName.isEmpty) continue;
+
+              print('    * Content: $fileName ($fileUrl)');
+
+              // Download the file
+              final response = await http.get(
+                Uri.parse(fileUrl + "&token=$token"),
+              );
+              if (response.statusCode == 200) {
+                // Get app document directory path
+                final documentsDir = await getApplicationSupportDirectory();
+                final filePath = '${documentsDir.path}/$fileName';
+
+                // Save the file locally
+                final localFile = File(filePath);
+                await localFile.writeAsBytes(response.bodyBytes);
+                print('    * File saved to app directory: $filePath');
+
+                // add file to Materials table
+
+                final materialEntry = MaterialsCompanion(
+                  title: drift.Value(fileName),
+                  description: drift.Value(''),
+                  subjectId: drift.Value(subjectId),
+                  filePath: drift.Value(filePath),
+                  createdAt: drift.Value(DateTime.now()),
+                );
+
+                final materialId = await database.insertMaterial(materialEntry);
+                try {
+                  await vectorService.processAndStoreDocument(
+                    materialId,
+                    filePath,
+                  );
+
+                  // Update material to mark it as vectorized
+                  await database.markMaterialAsVectorized(materialId);
+                } catch (e, s) {
+                  // Log the error but don't fail the whole operation
+                  print('Error processing document for vector storage: $e');
+                  print('Stack trace: $s');
+                  // Material is still added but not vectorized
+                }
+              } else {
+                print('    * Failed to download file: $fileName');
+              }
+
+              // TODO: Save content reference to database
+            }
+          }
+        }
+      }
+    }
+  }
+
+  Future<void> _saveCoursesToDatabase(
+    List<dynamic> courses,
+    String token,
+  ) async {
     final database = ref.watch(databaseProvider);
     int newSubjectsAdded = 0;
     int existingSubjectsNumber = 0;
@@ -148,7 +256,10 @@ class _MnemoszuneAppState extends ConsumerState<MnemoszuneApp> {
           );
 
           // Insert the subject into the database
-          await database.insertSubject(subjectEntry);
+          final subjectId = await database.insertSubject(subjectEntry);
+
+          saveCourseContent(token, course['id'], subjectId);
+
           newSubjectsAdded++;
         } else {
           existingSubjectsNumber++;

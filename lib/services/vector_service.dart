@@ -7,6 +7,7 @@ import 'package:mnemoszune/models/settings.dart';
 import 'package:mnemoszune/providers/settings_provider.dart';
 import 'package:mnemoszune/services/llm_service.dart';
 import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 class VectorService {
@@ -32,11 +33,13 @@ class VectorService {
               : 'https://api.openai.com/v1',
     );
     // Initialize memory vector store with the embeddings
-    _vectorStore = ObjectBoxVectorStore(
-      embeddings: embeddings,
-      dimensions: 512,
-      directory: "vector_store",
-    );
+    getApplicationSupportDirectory().then((directory) {
+      _vectorStore = ObjectBoxVectorStore(
+        embeddings: embeddings,
+        dimensions: 512,
+        directory: '$directory/vector_store',
+      );
+    });
   }
 
   Future<void> processAndStoreDocument(int materialId, String filePath) async {
